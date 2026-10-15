@@ -4,8 +4,6 @@ Everything here is additive: a client that advertises none of these
 capabilities (Claude Code, Cursor, ...) sees the same tools and replies as
 before. Spec: https://github.com/openai/mcp-extensions/blob/main/docs/spec.md
 
-- Asset pickers: search tools show results as a thumbnail grid via
-  `openai/elicitation/create` and return what the user picked.
 - Composer @-mentions: an app-only tool that searches scene objects,
   materials and collections.
 - Viewport app: the latest viewport screenshot, inline in the chat whenever
@@ -23,13 +21,10 @@ import logging
 import os
 import threading
 import time
-from dataclasses import dataclass
 from importlib import resources
 from typing import Any, Literal
 
-from mcp.shared.message import ServerMessageMetadata
-from mcp.types import ElicitResult, Icon
-from pydantic import BaseModel
+from mcp.types import Icon
 
 logger = logging.getLogger("BlenderMCPServer")
 
@@ -108,99 +103,6 @@ def is_app_only(tool: Any) -> bool:
     return isinstance(ui, dict) and ui.get("visibility") == ["app"]
 
 
-# ---------------------------------------------------------------- asset picker
-
-@dataclass
-class PickerOption:
-    id: str
-    title: str
-    description: str | None = None
-    thumbnail: str | None = None
-
-
-class _OpenAIFormRequest(BaseModel):
-    method: Literal["openai/elicitation/create"] = OPENAI_ELICITATION_METHOD
-    params: dict[str, Any]
-
-
-def picker_schema(title: str, options: list[PickerOption]) -> dict[str, Any]:
-    """A single-select form field whose options render as a thumbnail grid."""
-    choices = []
-    for option in options:
-        choice: dict[str, Any] = {"const": option.id, "title": option.title}
-        if option.description:
-            choice["description"] = option.description
-        if option.thumbnail:
-            choice["x-openai-thumbnail"] = {"src": option.thumbnail}
-        choices.append(choice)
-    return {
-        "type": "object",
-        "properties": {"asset": {"type": "string", "title": title, "oneOf": choices}},
-        "required": ["asset"],
-    }
-
-
-@dataclass
-class PickResult:
-    action: Literal["accept", "decline", "cancel"]
-    asset_id: str | None = None
-
-
-async def pick_asset(ctx: Any, message: str, title: str, options: list[PickerOption]) -> PickResult | None:
-    """Ask the user to pick one option, or None when no picker could be shown.
-
-    None covers clients without OpenAI forms and any failure showing the form,
-    so callers fall back to returning the plain result list.
-    """
-    options = [o for o in options if o.id]
-    try:
-        session = ctx.session
-    except Exception:
-        session = None
-    if not options or not supports_openai_forms(session):
-        return None
-    ids = {o.id for o in options}
-    request = _OpenAIFormRequest(
-        params={"mode": "form", "message": message, "requestedSchema": picker_schema(title, options)}
-    )
-    try:
-        result = await session.send_request(
-            request,
-            ElicitResult,
-            metadata=ServerMessageMetadata(related_request_id=ctx.request_id),
-        )
-    except Exception as e:
-        # A client that can't show the form answers with an error straight away,
-        # so don't keep asking it for the rest of the session.
-        try:
-            setattr(session, _FORMS_REFUSED_ATTR, True)
-        except Exception:
-            pass
-        logger.warning(f"Asset picker could not be shown, falling back to a text list: {e}")
-        return None
-    if result.action != "accept":
-        return PickResult(result.action)
-    chosen = (result.content or {}).get("asset")
-    if chosen not in ids:
-        logger.warning(f"Asset picker returned an unknown choice: {chosen!r}")
-        return None
-    return PickResult("accept", chosen)
-
-
-def picked_reply(source: str, picked: PickResult, blocks: dict[str, str], full_listing: str) -> str:
-    """The tool reply after a picker was shown."""
-    if picked.action == "accept":
-        return (
-            f"The user picked this {source} result from a visual picker. Use it; don't "
-            f"search again or pick a different one unless they ask.\n\n{blocks[picked.asset_id]}"
-        )
-    return (
-        f"These {source} results were shown to the user as a visual picker and they closed "
-        "it without choosing. Don't pick one for them: ask what they'd like instead.\n\n"
-        + full_listing
-    )
-
-
 # ---------------------------------------------------------------- viewport app
 
 # v2 is fullscreen-only; a new URI so hosts don't reuse the cached inline v1.
@@ -237,13 +139,6 @@ def viewport_html() -> str:
 # the scene version, which tells an open Viewport app to capture again.
 SCENE_CHANGING_COMMANDS = frozenset({
     "execute_code",
-    "set_texture",
-    "download_polyhaven_asset",
-    "download_sketchfab_model",
-    "download_polypizza_model",
-    "import_generated_asset",
-    "import_generated_asset_hunyuan",
-    "import_generated_asset_tripo",
 })
 
 # How long Blender must have been quiet before the app captures on its own, so

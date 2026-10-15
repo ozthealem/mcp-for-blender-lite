@@ -291,7 +291,7 @@
       : shown.length ? "Attached to your next message. Click more objects, or empty space to attach just the view."
       : state.pickable ? "Click an object to mention it in your next message."
       : state.addonOutdated ? "Click the image to attach it to your next message. To click on objects, "
-        + "update the Blender addon (uvx mcp-for-blender install-addon) and restart Blender."
+        + "update the Blender addon (mcp-for-blender-lite install-addon) and restart Blender."
       : "Click the image to attach it to your next message.";
     for (const el of $("stage").querySelectorAll(".marker")) el.remove();
     for (const pick of shown) {
