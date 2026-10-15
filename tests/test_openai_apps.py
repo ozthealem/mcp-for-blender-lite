@@ -14,7 +14,6 @@ from mcp.shared.message import SessionMessage
 from mcp.types import ClientCapabilities, JSONRPCMessage, JSONRPCNotification, JSONRPCRequest, JSONRPCResponse
 
 from blender_mcp import openai_apps, server
-from blender_mcp.openai_apps import PickerOption, pick_asset, picker_schema
 
 OPENAI_FORMS = {"extensions": {"openai/elicitation": {"form": {}}}}
 MCP_APPS = {"extensions": {"io.modelcontextprotocol/ui": {"mimeTypes": ["text/html;profile=mcp-app"]}}}
@@ -64,53 +63,6 @@ def test_apps_support_is_detected_and_can_be_forced(monkeypatch):
 
 # ---------------------------------------------------------------- picker
 
-OPTIONS = [
-    PickerOption("chair", "Chair", "CC0", "https://example.com/chair.png"),
-    PickerOption("sofa", "Sofa"),
-]
-
-
-def test_picker_schema_uses_titled_options_with_thumbnails():
-    field = picker_schema("Model", OPTIONS)["properties"]["asset"]
-    assert field["oneOf"][0] == {
-        "const": "chair",
-        "title": "Chair",
-        "description": "CC0",
-        "x-openai-thumbnail": {"src": "https://example.com/chair.png"},
-    }
-    assert field["oneOf"][1] == {"const": "sofa", "title": "Sofa"}
-
-
-def test_no_picker_without_openai_forms():
-    ctx = _ctx({}, {"action": "accept", "content": {"asset": "chair"}})
-    assert asyncio.run(pick_asset(ctx, "Pick", "Model", OPTIONS)) is None
-    assert ctx.session.sent == []
-
-
-def test_picker_sends_openai_elicitation_and_returns_the_choice():
-    ctx = _ctx(OPENAI_FORMS, {"action": "accept", "content": {"asset": "sofa"}})
-    picked = asyncio.run(pick_asset(ctx, "Pick a chair", "Model", OPTIONS))
-    assert (picked.action, picked.asset_id) == ("accept", "sofa")
-    [request] = ctx.session.sent
-    assert request["method"] == "openai/elicitation/create"
-    assert request["params"]["mode"] == "form"
-    assert request["params"]["message"] == "Pick a chair"
-
-
-@pytest.mark.parametrize("action", ["decline", "cancel"])
-def test_closing_the_picker_is_reported(action):
-    picked = asyncio.run(pick_asset(_ctx(OPENAI_FORMS, {"action": action}), "Pick", "Model", OPTIONS))
-    assert (picked.action, picked.asset_id) == (action, None)
-
-
-@pytest.mark.parametrize("reply", [
-    {"action": "accept", "content": {"asset": "not-offered"}},
-    RuntimeError("client went away"),
-])
-def test_a_bad_or_failed_picker_falls_back_to_the_listing(reply):
-    assert asyncio.run(pick_asset(_ctx(OPENAI_FORMS, reply), "Pick", "Model", OPTIONS)) is None
-
-
 POLYPIZZA_RESULTS = {
     "total": 2,
     "results": [
@@ -120,54 +72,6 @@ POLYPIZZA_RESULTS = {
          "Tri Count": 400, "Thumbnail": "https://static.poly.pizza/b.webp"},
     ],
 }
-
-
-def _search_polypizza(monkeypatch, ctx):
-    monkeypatch.setattr(server, "get_blender_connection",
-                        lambda: types.SimpleNamespace(send_command=lambda *_a, **_k: POLYPIZZA_RESULTS))
-    return asyncio.run(server._search_polypizza(ctx, query="chair", user_prompt=""))
-
-
-def test_search_returns_only_the_picked_asset(monkeypatch):
-    ctx = _ctx(OPENAI_FORMS, {"action": "accept", "content": {"asset": "b"}})
-    out = _search_polypizza(monkeypatch, ctx)
-    assert "picked this Poly Pizza result" in out
-    assert "Pine chair (ID: b)" in out
-    assert "Oak chair" not in out
-    assert "CC-BY models must be credited" in out
-    options = ctx.session.sent[0]["params"]["requestedSchema"]["properties"]["asset"]["oneOf"]
-    assert options[0]["x-openai-thumbnail"] == {"src": "https://static.poly.pizza/a.webp"}
-    assert options[0]["description"] == "Quaternius · CC0 1.0 · 216 tris"
-
-
-def test_search_after_a_dismissed_picker_lists_everything_and_says_so(monkeypatch):
-    out = _search_polypizza(monkeypatch, _ctx(OPENAI_FORMS, {"action": "cancel"}))
-    assert "closed it without choosing" in out
-    assert "Oak chair" in out and "Pine chair" in out
-
-
-def test_search_without_openai_forms_is_unchanged(monkeypatch):
-    out = _search_polypizza(monkeypatch, _ctx({}))
-    assert out.startswith("Found 2 models (of 2 total) matching 'chair'")
-    assert "picker" not in out
-
-
-def test_polyhaven_thumbnail_prefers_the_addon_url():
-    assert server._polyhaven_thumbnail({"id": "x", "thumbnail_url": "https://cdn/x?v=1"}) == "https://cdn/x?v=1"
-    assert server._polyhaven_thumbnail({"id": "rock_01"}).startswith(
-        "https://cdn.polyhaven.com/asset_img/thumbs/rock_01.png"
-    )
-
-
-def test_sketchfab_thumbnail_is_the_smallest_one_big_enough():
-    model = {"thumbnails": {"images": [
-        {"url": "https://s/100", "width": 100},
-        {"url": "https://s/1024", "width": 1024},
-        {"url": "https://s/256", "width": 256},
-        {"url": "http://s/insecure", "width": 300},
-    ]}}
-    assert server._sketchfab_thumbnail(model) == "https://s/256"
-    assert server._sketchfab_thumbnail({}) is None
 
 
 # ---------------------------------------------------------------- mentions
@@ -226,7 +130,7 @@ def test_mentioned_names_round_trip_through_the_uri(monkeypatch):
 
 
 def test_addon_lists_and_ranks_scene_items(monkeypatch):
-    from test_polypizza import _load_addon, _scene
+    from addon_stub import load_addon as _load_addon, scene as _scene
 
     def obj(name, kind, collection, *materials):
         return types.SimpleNamespace(
@@ -446,12 +350,10 @@ def test_viewport_html_ships_with_the_package():
 async def _exchange(monkeypatch, capabilities, steps):
     """Run the real server over in-memory streams: initialize with `capabilities`,
     then feed each (message, on_reply) step, returning every message the server sent."""
-    monkeypatch.setattr(server, "record_startup", lambda: None)
     monkeypatch.setattr(server, "check_addon_status_on_startup",
                         lambda: types.SimpleNamespace(needs_action=False, message=None))
     monkeypatch.setattr(server, "get_blender_connection",
                         lambda: types.SimpleNamespace(send_command=lambda *_a, **_k: POLYPIZZA_RESULTS))
-    monkeypatch.setenv("DISABLE_TELEMETRY", "1")
 
     to_server_send, to_server_recv = anyio.create_memory_object_stream(16)
     from_server_send, from_server_recv = anyio.create_memory_object_stream(16)
@@ -509,27 +411,6 @@ def test_app_only_tools_are_listed_for_mcp_apps_clients(monkeypatch):
     assert APP_TOOLS <= set(_list_tools(monkeypatch, MCP_APPS))
 
 
-def test_picker_round_trip_over_the_wire(monkeypatch):
-    """The elicitation goes out as openai/elicitation/create, and the reply to it
-    decides the tool result."""
-    result = {}
-
-    async def step(send, recv, received, reply_to):
-        await send(JSONRPCRequest(jsonrpc="2.0", id=2, method="tools/call", params={
-            "name": "search_assets", "arguments": {"source": "polypizza", "query": "chair"},
-        }))
-        elicit = (await recv.receive()).message.root
-        received.append(elicit)
-        assert elicit.method == "openai/elicitation/create"
-        assert [o["const"] for o in elicit.params["requestedSchema"]["properties"]["asset"]["oneOf"]] == ["a", "b"]
-        await send(JSONRPCResponse(jsonrpc="2.0", id=elicit.id, result={"action": "accept", "content": {"asset": "a"}}))
-        result["text"] = (await reply_to(2)).result["content"][0]["text"]
-
-    asyncio.run(_exchange(monkeypatch, OPENAI_FORMS, [step]))
-    assert "Oak chair (ID: a)" in result["text"]
-    assert "Pine chair" not in result["text"]
-
-
 # ---------------------------------------------------------------- Codex quirks
 
 def test_forms_can_be_forced_on_for_clients_that_dont_advertise_them(monkeypatch):
@@ -539,49 +420,3 @@ def test_forms_can_be_forced_on_for_clients_that_dont_advertise_them(monkeypatch
     monkeypatch.setenv(openai_apps.OPENAI_FORMS_ENV, "0")
     assert not openai_apps.supports_openai_forms(_session(OPENAI_FORMS))
 
-
-def test_a_refused_picker_is_not_offered_again_in_that_session(monkeypatch):
-    monkeypatch.setenv(openai_apps.OPENAI_FORMS_ENV, "1")
-    ctx = _ctx({}, RuntimeError("Method not found"))
-    assert asyncio.run(pick_asset(ctx, "Pick", "Model", OPTIONS)) is None
-    assert asyncio.run(pick_asset(ctx, "Pick", "Model", OPTIONS)) is None
-    assert len(ctx.session.sent) == 1
-    assert openai_apps.supports_openai_forms(_session({}))  # other sessions still try
-
-
-def test_picker_schema_has_only_the_top_level_keys_codex_accepts():
-    assert set(picker_schema("Model", OPTIONS)) <= {"$schema", "type", "properties", "required"}
-
-
-def test_consent_prompt_schema_has_only_the_top_level_keys_codex_accepts():
-    from blender_mcp.consent_prompt import CONSENT_SCHEMA
-
-    assert set(CONSENT_SCHEMA) <= {"$schema", "type", "properties", "required"}
-    assert CONSENT_SCHEMA["properties"]["consent"]["type"] == "boolean"
-
-
-@pytest.mark.parametrize("content, granted", [({"consent": True}, True), ({"consent": False}, False), ({}, False)])
-def test_consent_prompt_only_counts_an_explicit_yes(monkeypatch, content, granted):
-    from blender_mcp import consent_prompt
-
-    consent_prompt.reset_for_tests()
-    written, applied = {}, []
-    monkeypatch.setattr(consent_prompt, "_already_answered", lambda: False)
-    monkeypatch.setattr(consent_prompt, "_current_consent", lambda: False)
-    monkeypatch.setattr(consent_prompt, "_client_supports_elicitation", lambda ctx: True)
-    monkeypatch.setattr(consent_prompt, "_write_state", lambda **f: written.update(f))
-    monkeypatch.setattr(consent_prompt, "_apply_consent", lambda c: applied.append(c) or True)
-
-    sent = {}
-
-    async def elicit_form(message, requestedSchema, related_request_id=None):
-        sent["schema"] = requestedSchema
-        from mcp.types import ElicitResult
-        return ElicitResult(action="accept", content=content)
-
-    session = types.SimpleNamespace(elicit_form=elicit_form)
-    ctx = types.SimpleNamespace(request_context=types.SimpleNamespace(session=session), request_id=3)
-    asyncio.run(consent_prompt.maybe_prompt_for_consent(ctx))
-    assert sent["schema"] is consent_prompt.CONSENT_SCHEMA
-    assert written["consent"] is granted
-    assert applied == ([True] if granted else [])

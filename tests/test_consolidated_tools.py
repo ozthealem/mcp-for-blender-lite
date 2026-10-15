@@ -7,10 +7,7 @@ import asyncio
 from blender_mcp import blender_scripts, guides, server
 from blender_mcp.openai_apps import is_app_only
 
-MODEL_TOOLS = {
-    "get_addon_status", "disable_telemetry", "get_scene_info", "execute_blender_code",
-    "record_trajectory_feedback", "look", "generate_3d", "search_assets", "import_asset",
-}
+MODEL_TOOLS = {"get_addon_status", "get_scene_info", "execute_blender_code", "look"}
 
 
 def test_model_sees_only_the_consolidated_tools():
@@ -112,41 +109,6 @@ class _Blender:
         if isinstance(reply, Exception):
             raise reply
         return reply
-
-
-def test_texture_import_applies_the_material(monkeypatch):
-    blender = _Blender({
-        "download_polyhaven_asset": {"success": True, "message": "Downloaded", "material": "Rock",
-                                     "maps": ["diffuse"]},
-        "set_texture": {"success": True, "material": "Rock", "maps": ["diffuse"]},
-    })
-    monkeypatch.setattr(server, "get_blender_connection", lambda: blender)
-    reply = asyncio.run(server.import_asset(None, source="polyhaven", id="rock", asset_type="textures",
-                                            apply_to=["Ground"]))
-    assert ("set_texture", {"object_name": "Ground", "texture_id": "rock"}) in blender.sent
-    assert "Applied" in reply and server.POLYHAVEN_UNUSED_NOTE not in reply
-
-
-def test_sketchfab_import_needs_a_size():
-    reply = asyncio.run(server.import_asset(None, source="sketchfab", id="abc"))
-    assert reply.startswith("Error") and "target_size" in reply
-
-
-def test_a_missing_library_command_means_switched_off_or_outdated(monkeypatch):
-    from blender_mcp.addon_manager import EXPECTED_ADDON_PROTOCOL_VERSION, AddonHandshake
-
-    blender = _Blender({"search_sketchfab_models": Exception("Unknown command type: search_sketchfab_models")})
-    monkeypatch.setattr(server, "get_blender_connection", lambda: blender)
-
-    current = AddonHandshake(True, EXPECTED_ADDON_PROTOCOL_VERSION, [2, 1], [], "4.2", "native")
-    monkeypatch.setattr(server, "_addon_handshake", current)
-    reply = asyncio.run(server.search_assets(None, source="sketchfab", query="car"))
-    assert "switched off" in reply and "install-addon" not in reply
-
-    behind = AddonHandshake(False, 9, [2, 0], [], "4.2", "native")
-    monkeypatch.setattr(server, "_addon_handshake", behind)
-    reply = asyncio.run(server.search_assets(None, source="sketchfab", query="car"))
-    assert "install-addon" in reply
 
 
 def _look_text(result):

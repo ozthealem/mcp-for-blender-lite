@@ -1,10 +1,9 @@
 """Any server must work with any addon.
 
-The server updates itself through uvx; the addon only changes when the user
-reinstalls it. So this runs the model-facing tools against real addons from
-this repository's history - each one's actual command table and execute_code
-behaviour, read from its source - and pins the other direction too: today's
-addon still answers every command a released server sends.
+The addon only changes when the user reinstalls it. So this runs the
+model-facing tools against real addons from this repository's history - each
+one's actual command table and execute_code behaviour, read from its source -
+and checks that today's addon answers every command this server sends.
 """
 
 import ast
@@ -35,23 +34,6 @@ HISTORY = {
     "8b4e062": "protocol 11: Premium",
     "current": "this checkout",
 }
-
-# Every command a released server (2.1.x) sends. Today's addon must keep
-# answering all of them, or upgrading the addon breaks an older server.
-RELEASED_SERVER_COMMANDS = {
-    "get_scene_info", "get_object_info", "get_viewport_screenshot", "execute_code", "describe_node_type",
-    "bpy_api_lookup", "get_addon_info", "get_telemetry_consent", "set_telemetry_consent",
-    "list_scene_items", "pick_viewport_object", "get_world_state_snapshot", "drain_human_activity",
-    "get_polyhaven_status", "get_polyhaven_categories", "search_polyhaven_assets",
-    "get_polyhaven_asset_preview", "download_polyhaven_asset", "set_texture",
-    "get_sketchfab_status", "search_sketchfab_models", "get_sketchfab_model_preview", "download_sketchfab_model",
-    "get_polypizza_status", "search_polypizza_models", "download_polypizza_model",
-    "get_hyper3d_status", "create_rodin_job", "poll_rodin_job_status", "import_generated_asset",
-    "get_hunyuan3d_status", "create_hunyuan_job", "poll_hunyuan_job_status", "import_generated_asset_hunyuan",
-    "get_tripo_status", "create_tripo_job", "poll_tripo_job_status", "import_generated_asset_tripo",
-    "export_scene",
-}
-
 
 def _addon_source(ref: str) -> str:
     if ref == "current":
@@ -225,42 +207,7 @@ def test_addon_status_always_answers(addon):
     assert not reply.startswith("Error"), reply
 
 
-@pytest.mark.parametrize("source, command", [
-    ("polyhaven", "search_polyhaven_assets"),
-    ("sketchfab", "search_sketchfab_models"),
-    ("polypizza", "search_polypizza_models"),
-])
-def test_asset_search_works_or_asks_for_an_update(addon, source, command):
-    reply = _text(_run(server.search_assets(None, source=source, query="chair")))
-    accepted = addon.signatures.get(command, set())
-    works = command in addon.commands and (accepted is None or {"query"} <= accepted or source == "sketchfab")
-    if works:
-        assert "Unknown command" not in reply and "unexpected keyword" not in reply, reply
-    else:
-        assert "install-addon" in reply, reply
-    assert "unexpected keyword" not in reply and "Traceback" not in reply
-
-
-def test_asset_import_works_or_asks_for_an_update(addon):
-    reply = _run(server.import_asset(None, source="polypizza", id="abc", target_size=1.0))
-    if "download_polypizza_model" in addon.commands:
-        assert not reply.startswith("Error"), reply
-    else:
-        assert "install-addon" in reply, reply
-
-
-def test_generation_never_raises(addon):
-    for provider in ("auto", "tripo", "hunyuan3d", "hyper3d"):
-        reply = _run(server.generate_3d(None, prompt="a stool", provider=provider, wait_seconds=10))
-        assert isinstance(reply, str) and reply
-
-
 # ------------------------------------------------------------ any server, new addon
-
-def test_current_addon_answers_every_command_released_servers_send():
-    missing = RELEASED_SERVER_COMMANDS - _commands(_addon_source("current"))
-    assert not missing, f"Removing these breaks older servers: {sorted(missing)}"
-
 
 def _server_commands() -> set[str]:
     """Command names this package can send, read from its source."""
@@ -270,10 +217,8 @@ def _server_commands() -> set[str]:
             if isinstance(node, ast.Call) and node.args and isinstance(node.args[0], ast.Constant) \
                     and isinstance(node.args[0].value, str):
                 name = getattr(node.func, "attr", None) or getattr(node.func, "id", None)
-                if name in ("send_command", "send", "_generation_send"):
+                if name in ("send_command", "send"):
                     found.add(node.args[0].value)
-    # get_{name}_status, built from a list.
-    found.update(f"get_{n}_status" for n in ("polyhaven", "sketchfab", "polypizza", "hunyuan3d", "hyper3d"))
     return found
 
 
