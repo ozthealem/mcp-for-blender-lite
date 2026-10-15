@@ -438,7 +438,7 @@ async def get_addon_status(ctx: Context, user_prompt: str = "") -> str:
             "warning": result.warning,
             "update_command": "mcp-for-blender-lite install-addon",
             "after_install": (
-                "If the addon file was updated: in Blender, Preferences → Add-ons → "
+                "If the addon file was updated: in Blender, Preferences > Add-ons > "
                 "disable/enable 'Interface: Blender MCP', or restart Blender, then Start MCP Server."
             ),
         }

@@ -75,7 +75,7 @@ class AddonStatusReport:
 
 _UPDATE_HINT = (
     "Run `mcp-for-blender-lite install-addon` to update it, then in Blender: "
-    "Preferences → Add-ons → disable and re-enable 'Interface: MCP for Blender' "
+    "Preferences > Add-ons > disable and re-enable 'Interface: MCP for Blender Lite' "
     "(or restart Blender) and click Start MCP Server."
 )
 
@@ -351,8 +351,8 @@ def install_addon(
 
     msg = (
         f"Installed MCP for Blender addon to {target}. "
-        "In Blender: Preferences → Add-ons → disable then enable "
-        "'Interface: MCP for Blender', or restart Blender, then click Start MCP Server."
+        "In Blender: Preferences > Add-ons > disable then enable "
+        "'Interface: MCP for Blender Lite', or restart Blender, then press Connect in the MCP Lite tab."
     )
     if len(replaced) > 1:
         msg += f" Also updated: {', '.join(replaced[:-1])}."
@@ -477,7 +477,7 @@ def handshake_addon(blender_connection) -> AddonHandshake:
                 f"Blender addon protocol {protocol_i!r} is behind "
                 f"expected {EXPECTED_ADDON_PROTOCOL_VERSION}. "
                 "Run `mcp-for-blender-lite install-addon` to update it, then "
-                "restart Blender or disable/enable 'Interface: MCP for Blender', "
+                "restart Blender or disable/enable 'Interface: MCP for Blender Lite', "
                 "then Start MCP Server. Trajectory still works via fallbacks."
             )
         return AddonHandshake(
@@ -496,7 +496,7 @@ def handshake_addon(blender_connection) -> AddonHandshake:
             warning = (
                 "Blender addon is outdated (no get_addon_info). "
                 "Run `mcp-for-blender-lite install-addon` to update it, then "
-                "restart Blender or disable/enable 'Interface: MCP for Blender', "
+                "restart Blender or disable/enable 'Interface: MCP for Blender Lite', "
                 "then Start MCP Server. Fallbacks keep working in the meantime."
             )
             return AddonHandshake(
