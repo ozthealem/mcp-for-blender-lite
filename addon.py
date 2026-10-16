@@ -1131,10 +1131,11 @@ class BLENDERMCP_PT_Panel(bpy.types.Panel):
 
         box = layout.box()
         col = box.column()
-        if scene.blendermcp_server_running:
-            server = getattr(bpy.types, "blendermcp_server", None)
-            running_port = getattr(server, "port", scene.blendermcp_port)
-            col.label(text=f"Listening on 127.0.0.1:{running_port}", icon='CHECKMARK')
+        # Ask the live server, never a saved flag: a .blend saved while
+        # connected would otherwise reopen showing a connection that isn't there.
+        server = getattr(bpy.types, "blendermcp_server", None)
+        if server is not None and server.running:
+            col.label(text=f"Listening on 127.0.0.1:{server.port}", icon='CHECKMARK')
             col.operator("blendermcp.stop_server", text="Disconnect", icon='X')
         else:
             col.label(text="Not connected", icon='RADIOBUT_OFF')
@@ -1186,7 +1187,6 @@ class BLENDERMCP_OT_StartServer(bpy.types.Operator):
 
         # Start the server
         bpy.types.blendermcp_server.start()
-        scene.blendermcp_server_running = bpy.types.blendermcp_server.running
 
         return {'FINISHED'}
 
@@ -1198,14 +1198,10 @@ class BLENDERMCP_OT_StopServer(bpy.types.Operator):
     bl_description = "Stop listening for the MCP server"
 
     def execute(self, context):
-        scene = context.scene
-
         # Stop the server if it exists
         if hasattr(bpy.types, "blendermcp_server") and bpy.types.blendermcp_server:
             bpy.types.blendermcp_server.stop()
             del bpy.types.blendermcp_server
-
-        scene.blendermcp_server_running = False
 
         return {'FINISHED'}
 
@@ -1229,11 +1225,6 @@ def register():
         max=65535
     )
 
-    bpy.types.Scene.blendermcp_server_running = bpy.props.BoolProperty(
-        name="Server Running",
-        default=False
-    )
-
     for cls in CLASSES:
         bpy.utils.register_class(cls)
 
@@ -1251,7 +1242,6 @@ def unregister():
         bpy.utils.unregister_class(cls)
 
     del bpy.types.Scene.blendermcp_port
-    del bpy.types.Scene.blendermcp_server_running
 
     print("BlenderMCP Lite addon unregistered")
 
