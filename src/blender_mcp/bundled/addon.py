@@ -665,7 +665,9 @@ class BlenderMCPServer:
             # Observation scripts (look, scene info) restore what they touch;
             # anything else is an edit and gets its own undo step, which also
             # marks the file as changed so Blender asks to save on quit.
-            if "__MCP_RESULT__" not in code:
+            # A script that saved the file leaves it clean; an undo step now
+            # would mark it changed again and Blender would ask to save on quit.
+            if "__MCP_RESULT__" not in code and "save_mainfile" not in code:
                 _push_undo("MCP: script")
             return {"executed": True, "result": captured_output}
         except Exception as e:
