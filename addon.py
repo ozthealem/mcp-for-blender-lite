@@ -662,6 +662,11 @@ class BlenderMCPServer:
                 exec(code, namespace)
 
             captured_output = capture_buffer.getvalue()
+            # Observation scripts (look, scene info) restore what they touch;
+            # anything else is an edit and gets its own undo step, which also
+            # marks the file as changed so Blender asks to save on quit.
+            if "__MCP_RESULT__" not in code:
+                _push_undo("MCP: script")
             return {"executed": True, "result": captured_output}
         except Exception as e:
             # Give the caller the same detail we have: exception type, message,
@@ -1047,6 +1052,19 @@ class BlenderMCPServer:
             "selection_only": use_selection,
             "exported": exported,
         }
+
+def _push_undo(message):
+    """Add an undo step from a timer callback, where there is no window context."""
+    try:
+        wm = bpy.context.window_manager
+        window = wm.windows[0] if wm and wm.windows else None
+        if window is None:
+            return
+        with bpy.context.temp_override(window=window):
+            bpy.ops.ed.undo_push(message=message)
+    except Exception as e:
+        print(f"BlenderMCP: undo step skipped: {e}")
+
 
 #region Access token
 
