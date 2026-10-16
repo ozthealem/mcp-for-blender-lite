@@ -42,6 +42,22 @@ config file is backed up first). A portable Blender is not found automatically: 
 the addon zip from the same folder with Edit > Preferences > Add-ons > Install from Disk.
 Then enable **MCP for Blender Lite**, press N > **MCP Lite** > **Connect**, and restart Claude.
 
+## Install script (Linux, macOS)
+
+Download `mcp_for_blender_lite_linux_macos_<version>.tar.gz` from
+[Releases](https://github.com/ozthealem/mcp-for-blender-lite/releases), then:
+
+```bash
+tar xzf mcp_for_blender_lite_linux_macos_*.tar.gz
+sh mcp_for_blender_lite_linux_macos_*/install.sh
+```
+
+It needs Python 3.10+ with venv (Debian/Ubuntu: `sudo apt install python3 python3-venv`).
+The server goes to `~/.local/share/mcp-for-blender-lite` (macOS: `~/Library/Application Support/`),
+the addon into Blender's user addons folder, and the server is registered with Claude
+Desktop and Claude Code. A Blender from a tarball or Flatpak may not be found: install the
+addon zip by hand as above.
+
 ## Install from source
 
 You need Python 3.10 or newer and Blender 4.2 or newer.

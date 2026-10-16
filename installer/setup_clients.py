@@ -1,4 +1,4 @@
-"""Second half of install.bat: put the addon into every Blender found and
+"""Second half of install.bat / install.sh: put the addon into every Blender found and
 register the server with Claude Desktop and Claude Code.
 
 Every file it changes is backed up first (*.bak-mcp-lite). Nothing is sent
@@ -39,11 +39,19 @@ def install_addon(exe: str):
         say("Edit > Preferences > Add-ons > Install from Disk > mcp_for_blender_lite_addon_*.zip")
 
 
+def claude_desktop_folder() -> Path | None:
+    if sys.platform == "win32":
+        appdata = os.environ.get("APPDATA")
+        return Path(appdata) / "Claude" if appdata else None
+    if sys.platform == "darwin":
+        return Path.home() / "Library" / "Application Support" / "Claude"
+    return Path(os.environ.get("XDG_CONFIG_HOME", Path.home() / ".config")) / "Claude"
+
+
 def claude_desktop(exe: str):
-    appdata = os.environ.get("APPDATA")
-    if not appdata:
+    folder = claude_desktop_folder()
+    if folder is None:
         return
-    folder = Path(appdata) / "Claude"
     if not folder.exists():
         say("Claude Desktop yok, atlandi / Claude Desktop not installed, skipped.")
         return
