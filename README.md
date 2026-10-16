@@ -30,7 +30,19 @@ Kept: `execute_blender_code`, `look` (viewport, camera, angles, frames, images),
 `get_scene_info`, `get_addon_status`, the viewport app for MCP Apps clients,
 node and API lookups, scene export, and safe mode.
 
-## Install
+## One-click install (Windows)
+
+1. Install [Python](https://www.python.org/downloads/) 3.10+ (tick "Add python.exe to PATH").
+2. From [Releases](https://github.com/ozthealem/mcp-for-blender-lite/releases) download
+   `mcp_for_blender_lite_windows_<version>.zip`, unzip it and double-click `install.bat`.
+
+It installs the server into `%LOCALAPPDATA%\mcp-for-blender-lite`, copies the addon into
+the Blender it finds, and registers the server with Claude Desktop and Claude Code (each
+config file is backed up first). A portable Blender is not found automatically: install
+the addon zip from the same folder with Edit > Preferences > Add-ons > Install from Disk.
+Then enable **MCP for Blender Lite**, press N > **MCP Lite** > **Connect**, and restart Claude.
+
+## Install from source
 
 You need Python 3.10 or newer and Blender 4.2 or newer.
 
