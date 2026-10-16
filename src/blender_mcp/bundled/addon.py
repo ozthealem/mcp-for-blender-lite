@@ -18,7 +18,7 @@ from contextlib import redirect_stdout
 bl_info = {
     "name": "MCP for Blender Lite",
     "author": "Siddharth Ahuja, ozthealem",
-    "version": (1, 8, 1),
+    "version": (1, 0, 0),
     "blender": (4, 2, 0),
     "location": "View3D > Sidebar > MCP Lite",
     "description": "Offline MCP bridge: lets a local MCP client drive Blender",
